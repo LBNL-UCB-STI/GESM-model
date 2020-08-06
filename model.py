@@ -231,7 +231,7 @@ class Model:
         self.__originDestination.initializeTimePeriod(timePeriod)
         self.__tripGeneration.initializeTimePeriod(timePeriod)
         self.demand.initializeDemand(self.__population, self.__originDestination, self.__tripGeneration, self.__trips,
-                                     self.microtypes, self.__distanceBins, 0.25)
+                                     self.microtypes, self.__distanceBins, 1.1)
         self.choice.initializeChoiceCharacteristics(self.__trips, self.microtypes, self.__distanceBins)
 
     def findEquilibrium(self):
@@ -303,7 +303,7 @@ if __name__ == "__main__":
     #               modesAndMicrotypes=list(zip(["A", "D", "A", "D"], ["bus", "bus", "rail", "rail"])),
     #               method="shgo")
     o = Optimizer("input-data",
-                  modesAndMicrotypes=list(zip(["A", "B", "C", "D", "A", "D"], ["bus", "bus", "bus", "bus", "rail","rail"])),
+                  modesAndMicrotypes=list(zip(["A", "B", "C", "D"], ["bus", "bus", "bus", "bus"])),
                   method="noisy")
     # o.evaluate(np.array([0., 30., 200., 200., 300., 300.]))
     # o.evaluate(np.array([0., 30., 200., 200., 300., 300.]))

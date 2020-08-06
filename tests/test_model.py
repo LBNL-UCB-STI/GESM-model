@@ -11,7 +11,7 @@ def test_find_equilibrium():
     a = Model(ROOT_DIR + "/../input-data")
     a.initializeTimePeriod("AM-Peak")
     a.findEquilibrium()
-    busLaneDistance = np.arange(0, 3400, 200)
+    busLaneDistance = np.arange(0, 5000, 200)
     busSpeed = []
     carSpeedA = []
     carSpeedB = []
@@ -24,12 +24,12 @@ def test_find_equilibrium():
     ldCosts = []
     allCosts = []
     for dist in busLaneDistance:
-        a.scenarioData['subNetworkData'].at[15, "Length"] = dist
-        a.scenarioData['subNetworkData'].at[6, "Length"] = 4000 - dist
+        a.scenarioData['subNetworkData'].at[13, "Length"] = dist
+        a.scenarioData['subNetworkData'].at[2, "Length"] = 5000 - dist
         a.findEquilibrium()
         ms = a.getModeSplit()
         speeds = pd.DataFrame(a.microtypes.getModeSpeeds())
-        busSpeed.append(speeds.loc["bus", "C"])
+        busSpeed.append(speeds.loc["bus", "A"])
         carSpeedA.append(speeds.loc["auto", "A"])
         carSpeedB.append(speeds.loc["auto", "B"])
         carSpeedC.append(speeds.loc["auto", "C"])
@@ -73,7 +73,7 @@ def test_find_equilibrium():
     # plt.scatter(busLaneDistance, operatorCosts, label="operator")
     # plt.scatter(busLaneDistance, ldCosts, label="lane dedication")
     plt.xlabel("Bus Lane Distance In Microtype A")
-    plt.ylabel("User costs")
+    plt.ylabel("Costs")
     plt.legend()
     if not os.path.exists(ROOT_DIR + "/../plots"):
         os.mkdir(ROOT_DIR + "/../plots")

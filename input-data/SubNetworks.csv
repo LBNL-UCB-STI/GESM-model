@@ -6,7 +6,7 @@
 5,C,Auto,10000,20,Road,False
 6,C,Auto-Bus,4000,20,Road,False
 7,D,Auto,10000,22,Road,False
-8,D,Auto-Bus,1000,22,Road,False
+8,D,Auto-Bus,2000,22,Road,False
 9,A,Walk,10000,1.35,Sidewalk,True
 10,B,Walk,10000,1.35,Sidewalk,True
 11,C,Walk,10000,1.35,Sidewalk,True

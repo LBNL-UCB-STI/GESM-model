@@ -118,7 +118,7 @@ class Demand:
                 #     if allocation > 0:
                 #         common_modes.append(microtypes[microtypeID].mode_names)
                 modes = set.intersection(*common_modes)
-                tripRatePerHour = ratePerHourPerCapita * pop
+                tripRatePerHour = ratePerHourPerCapita * pop * portion
                 self.tripRate += tripRatePerHour
                 demandForPMT = ratePerHourPerCapita * pop * distanceBins[odi.distBin]
                 self.demandForPMT += demandForPMT
