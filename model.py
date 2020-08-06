@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import shgo
 from scipy.optimize import minimize, Bounds
+from skopt import gp_minimize
+from noisyopt import minimizeCompass
 
 from utils.OD import TripCollection, OriginDestination, TripGeneration
 from utils.choiceCharacteristics import CollectedChoiceCharacteristics
@@ -83,8 +85,13 @@ class Optimizer:
             lowerBoundsROW = []
         upperBoundsHeadway = [3600.] * self.nModes()
         lowerBoundsHeadway = [120.] * self.nModes()
+        defaultHeadway = [300.] * self.nModes()
         bounds = list(zip(lowerBoundsROW + lowerBoundsHeadway, upperBoundsROW + upperBoundsHeadway))
         if self.__method == "shgo":
+            return bounds
+        elif self.__method == "sklearn":
+            return list(zip(lowerBoundsROW + lowerBoundsHeadway, upperBoundsROW + upperBoundsHeadway, defaultHeadway))
+        elif self.__method == "noisy":
             return bounds
         else:
             return Bounds(lowerBoundsROW + lowerBoundsHeadway, upperBoundsROW + upperBoundsHeadway)
@@ -95,9 +102,13 @@ class Optimizer:
         return np.array(network + headways)
 
     def minimize(self):
-        self.model.resetNetworks()
         if self.__method == "shgo":
             return shgo(self.evaluate, self.getBounds(), sampling_method="simplicial")
+        elif self.__method == "sklearn":
+            b = self.getBounds()
+            return gp_minimize(self.evaluate, self.getBounds(), n_calls=100)
+        elif self.__method == "noisy":
+            return minimizeCompass(self.evaluate, self.x0(), bounds=self.getBounds(), paired=False, deltainit=200.0, errorcontrol=False)
         else:
             return minimize(self.evaluate, self.x0(), bounds=self.getBounds(), method=self.__method)
         # return dual_annealing(self.evaluate, self.getBounds(), no_local_search=False, initial_temp=150.)
@@ -220,7 +231,7 @@ class Model:
         self.__originDestination.initializeTimePeriod(timePeriod)
         self.__tripGeneration.initializeTimePeriod(timePeriod)
         self.demand.initializeDemand(self.__population, self.__originDestination, self.__tripGeneration, self.__trips,
-                                     self.microtypes, self.__distanceBins, 0.325)
+                                     self.microtypes, self.__distanceBins, 0.25)
         self.choice.initializeChoiceCharacteristics(self.__trips, self.microtypes, self.__distanceBins)
 
     def findEquilibrium(self):
@@ -288,12 +299,15 @@ class Model:
 
 if __name__ == "__main__":
     # o = Optimizer("input-data", list(zip([2, 4, 6, 8], [13, 14, 15, 16])))
-    o = Optimizer("input-data", fromToSubNetworkIDs=list(zip([2, 8], [13, 16])),
-                  modesAndMicrotypes=list(zip(["A","D", "A", "D"], ["bus", "bus", "rail", "rail"])),
-                  method="shgo")
-    o.evaluate(np.array([0., 30., 200., 200., 300., 300.]))
-    o.evaluate(np.array([0., 30., 200., 200., 300., 300.]))
-    o.evaluate(np.array([0., 40., 200., 200., 300., 300.]))
+    # o = Optimizer("input-data", fromToSubNetworkIDs=list(zip([2, 8], [13, 16])),
+    #               modesAndMicrotypes=list(zip(["A", "D", "A", "D"], ["bus", "bus", "rail", "rail"])),
+    #               method="shgo")
+    o = Optimizer("input-data",
+                  modesAndMicrotypes=list(zip(["A", "B", "C", "D", "A", "D"], ["bus", "bus", "bus", "bus", "rail","rail"])),
+                  method="noisy")
+    # o.evaluate(np.array([0., 30., 200., 200., 300., 300.]))
+    # o.evaluate(np.array([0., 30., 200., 200., 300., 300.]))
+    # o.evaluate(np.array([300., 200., 200., 200.]))
     output = o.minimize()
     print("DONE")
     print(output.x)
