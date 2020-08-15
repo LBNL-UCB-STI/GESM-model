@@ -70,7 +70,7 @@ class Mode:
         self._N = dict()
         self._L_blocked = dict()
         self.N_queued = 0.0
-        self.queuing_speed = 1.0
+        self.queuing_speed = 0.1
         self.params = params
         self.__idx = idx # TODO: Replace with params.index.get_loc(idx) and use to_numpy() to access
         self._networks = networks
@@ -163,8 +163,8 @@ class Mode:
         maxAccumulation = sum([n.getMaxAccumulationForMode(self) for n in self._networks])
 
         if ll_accumulation > maxAccumulation:
-            print("THIS IS BAD")
-            return maxAccumulation, ll_accumulation - maxAccumulation
+            over = ll_accumulation - maxAccumulation
+            return maxAccumulation, over
         else:
             return ll_accumulation, 0.0
 
@@ -619,11 +619,11 @@ class Network:
         else:
             return np.inf
 
-    def getMaxAccumulation(self):
+    def getPeakAccumulation(self):
         if self.type == "Road":
             if self.L > 0:
                 L_eq = self.L - self.getBlockedDistance()
-                return self.jamDensity * L_eq * 100000
+                return self.jamDensity * L_eq * 0.5
             else:
                 return 0.0
         else:
@@ -641,7 +641,7 @@ class Network:
         return net / mode.relativeLength /1609.34 * 3600.0 # convert from vehicle meters / sec to vehicle miles / hr
 
     def getMaxAccumulationForMode(self, mode: Mode) -> float:
-        totalAccumulationFlow = self.getMaxFlow()
+        totalAccumulationFlow = self.getPeakAccumulation()
         otherModeAccumulation = 0.0
         for otherModeName in self._modes.keys():
             if otherModeName != mode.name:
