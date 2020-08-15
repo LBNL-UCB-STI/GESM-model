@@ -2,6 +2,7 @@ from typing import List, Dict
 
 import numpy as np
 import pandas as pd
+from math import isinf, isnan
 
 from utils.supply import TravelDemand, TravelDemands
 
@@ -68,8 +69,10 @@ class Mode:
         self._N_tot = 0.0
         self._N = dict()
         self._L_blocked = dict()
+        self.N_queued = 0.0
+        self.queuing_speed = 1.0
         self.params = params
-        self.__idx = idx
+        self.__idx = idx # TODO: Replace with params.index.get_loc(idx) and use to_numpy() to access
         self._networks = networks
         self._averagePassengerDistanceInSystem = 0.0
         self.__bad = False
@@ -78,6 +81,7 @@ class Mode:
             self._N[n] = 0.0
             self._L_blocked[n] = 0.0
         self.travelDemand = TravelDemand()
+
 
     @property
     def relativeLength(self):
@@ -117,7 +121,12 @@ class Mode:
         return str([self.name + ': N=' + str(self._N) + ', L_blocked=' + str(self._L_blocked)])
 
     def getSpeed(self):
-        return max(self._N, key=self._N.get).getBaseSpeed()
+        if self.N_queued > 0:
+            non_queued_speed = max(self._N, key=self._N.get).getBaseSpeed()
+            queued_speed = self.queuing_speed
+            return ((self._N_tot - self.N_queued) * non_queued_speed + self.N_queued * queued_speed) / self._N_tot
+        else:
+            return max(self._N, key=self._N.get).getBaseSpeed()
 
     def getN(self, network):
         return self._N[network]
@@ -128,21 +137,45 @@ class Mode:
     def getBlockedDistance(self, network):
         return self._L_blocked[network]
 
+    def getMaxFlow(self):
+        return sum([n.getMaxFlow() for n in self._networks])
+
     def updateN(self, demand: TravelDemand):
-        n_new = self.getLittlesLawN(demand.rateOfPmtPerHour, demand.averageDistanceInSystemInMiles)
+        n_new, n_queued = self.getLittlesLawN(demand.rateOfPmtPerHour, demand.averageDistanceInSystemInMiles)
         self._N_tot = n_new
+        self.N_queued = n_queued
         self.allocateVehicles()
 
     def getLittlesLawN(self, rateOfPmtPerHour: float, averageDistanceInSystemInMiles: float):
+        # maxPmtPerHour = sum([n.getMaxFlowForMode(self) for n in self._networks]) * 0.3
         speedInMilesPerHour = self.getSpeed() * 2.23694
-        if not (speedInMilesPerHour >= 2.0):
-            self.__bad = True
-            speedInMilesPerHour = 2.0
+        # if rateOfPmtPerHour > maxPmtPerHour:
+        #     N_normal = maxPmtPerHour / speedInMilesPerHour
+        #     self.N_queued = 0.0# (rateOfPmtPerHour - maxPmtPerHour) / 25000
+        #     # self.__bad = True
+        #     return N_normal + self.N_queued
+        # else:
+        #     self.__bad = False
+        #     self.N_queued = 0.0
+        #     return rateOfPmtPerHour / speedInMilesPerHour
+        ll_accumulation = rateOfPmtPerHour / speedInMilesPerHour
+
+        maxAccumulation = sum([n.getMaxAccumulationForMode(self) for n in self._networks])
+
+        if ll_accumulation > maxAccumulation:
+            print("THIS IS BAD")
+            return maxAccumulation, ll_accumulation - maxAccumulation
         else:
-            self.__bad = False
+            return ll_accumulation, 0.0
+
+
+        # if not (speedInMilesPerHour >= 2.0):
+        #     self.__bad = True
+        #     speedInMilesPerHour = 2.0
+        # else:
+        #     self.__bad = False
         # averageTimeInSystemInHours = averageDistanceInSystemInMiles / speedInMilesPerHour
         # return rateOfPmtPerHour / averageDistanceInSystemInMiles * averageTimeInSystemInHours
-        return rateOfPmtPerHour / speedInMilesPerHour
 
     def getPassengerFlow(self) -> float:
         if np.any([n.isJammed for n in self._networks]):
@@ -270,44 +303,55 @@ class AutoMode(Mode):
 
     def allocateVehicles(self):
         """for constant car speed"""
-        current_allocation = []
-        blocked_lengths = []
-        lengths = []
-        other_mode_n_eq = []
-        jammed = []
-        for n in self._networks:
-            other_modes = list(n.N_eq.keys())
-            if self.name in other_modes:
-                other_modes.remove(self.name)
-            current_allocation.append(self._N[n])
-            blocked_lengths.append(n.getBlockedDistance())
-            lengths.append(n.L)
-            other_mode_n_eq.append(sum([n.N_eq[m] for m in other_modes]))
-            jammed.append(n.isJammed)
-        n_eq_other = sum(other_mode_n_eq)
-        L_tot = sum(lengths)
-        L_blocked_tot = sum(blocked_lengths)
-        density_av = (self._N_tot + n_eq_other) / (L_tot - L_blocked_tot) * self.relativeLength
-        if any(jammed):
-            print(density_av)
         if self._N_tot > 0:
-            n_new = np.nan_to_num(np.array(
-                [density_av * (lengths[i] - blocked_lengths[i]) - other_mode_n_eq[i] for i in range(len(lengths))]))
+            current_allocation = []
+            blocked_lengths = []
+            lengths = []
+            other_mode_n_eq = []
+            jammed = []
+            for n in self._networks:
+                other_modes = list(n.N_eq.keys())
+                if self.name in other_modes:
+                    other_modes.remove(self.name)
+                current_allocation.append(self._N[n])
+                blocked_lengths.append(n.getBlockedDistance())
+                lengths.append(n.L)
+                other_mode_n_eq.append(sum([n.N_eq[m] for m in other_modes]))
+                jammed.append(n.isJammed)
+            n_eq_other = sum(other_mode_n_eq)
+            L_tot = sum(lengths)
+            L_blocked_tot = sum(blocked_lengths)
+            density_av = (self._N_tot + n_eq_other) / (L_tot - L_blocked_tot) * self.relativeLength
+            if any(jammed):
+                print(density_av)
+            if self._N_tot > 0:
+                n_new = np.nan_to_num(np.array(
+                    [density_av * (lengths[i] - blocked_lengths[i]) - other_mode_n_eq[i] for i in range(len(lengths))]))
+            else:
+                n_new = np.array([0.0] * len(lengths))
+            should_be_empty = (n_new < 0) | np.array(jammed)
+            to_reallocate = np.sum(n_new[should_be_empty])
+            n_new[~should_be_empty] += to_reallocate * n_new[~should_be_empty] / np.sum(n_new[~should_be_empty])
+            n_new[should_be_empty] = 0
+            if np.any(np.isnan(n_new)):
+                print("WTF")
+            for ind, n in enumerate(self._networks):
+                n.N_eq[self.name] = n_new[ind] * self.relativeLength
+                self._N[n] = n_new[ind]
         else:
-            n_new = np.array([0.0] * len(lengths))
-        should_be_empty = (n_new < 0) | np.array(jammed)
-        to_reallocate = np.sum(n_new[should_be_empty])
-        n_new[~should_be_empty] += to_reallocate * n_new[~should_be_empty] / np.sum(n_new[~should_be_empty])
-        n_new[should_be_empty] = 0
-        for ind, n in enumerate(self._networks):
-            n.N_eq[self.name] = n_new[ind] * self.relativeLength
-            self._N[n] = n_new[ind]
+            for ind, n in enumerate(self._networks):
+                n.N_eq[self.name] = 0.0
+                self._N[n] = 0.0
 
 
 class BusMode(Mode):
     def __init__(self, networks, modeParams: pd.DataFrame, idx: str) -> None:
         super().__init__(networks, modeParams, idx, "bus")
         self.__idx = idx
+        self.passengerWaitInSec = self.params.at[self.__idx, "PassengerWait"]
+        self.passengerWaitInSecDedicated = self.params.at[self.__idx, "PassengerWaitDedicated"]
+        self.stopSpacingInMeters = self.params.at[self.__idx, "StopSpacing"]
+        self.minStopTimeInSec = self.params.at[self.__idx, "MinStopTime"]
         self.routeAveragedSpeed = super().getSpeed()
         self.routeLength = self.getRouteLength()
         self.addVehicles(self.routeLength / self.routeAveragedSpeed / self.headwayInSec)
@@ -315,25 +359,28 @@ class BusMode(Mode):
         self.occupancy = 0.0
         self.updateModeBlockedDistance()
 
+
     @property
     def headwayInSec(self):
         return self.params.at[self.__idx, "Headway"]
 
-    @property
-    def passengerWaitInSec(self):
-        return self.params.at[self.__idx, "PassengerWait"]
+    # Removing these as properties because the pandas lookup slows things down
 
-    @property
-    def passengerWaitInSecDedicated(self):
-        return self.params.at[self.__idx, "PassengerWaitDedicated"]
+    # @property
+    # def passengerWaitInSec(self):
+    #     return self.params.at[self.__idx, "PassengerWait"]
 
-    @property
-    def stopSpacingInMeters(self):
-        return self.params.at[self.__idx, "StopSpacing"]
+    # @property
+    # def passengerWaitInSecDedicated(self):
+    #     return self.params.at[self.__idx, "PassengerWaitDedicated"]
 
-    @property
-    def minStopTimeInSec(self):
-        return self.params.at[self.__idx, "MinStopTime"]
+    # @property
+    # def stopSpacingInMeters(self):
+    #     return self.params.at[self.__idx, "StopSpacing"]
+
+    # @property
+    # def minStopTimeInSec(self):
+    #     return self.params.at[self.__idx, "MinStopTime"]
 
     @property
     def fare(self):
@@ -352,6 +399,8 @@ class BusMode(Mode):
 
     def updateN(self, demand: TravelDemand):
         n_new = self.routeLength / self.routeAveragedSpeed / self.headwayInSec
+        if isnan(n_new):
+            print("BAD BUS ACCUMULATION")
         self._N_tot = n_new
         self.allocateVehicles()
 
@@ -421,16 +470,20 @@ class BusMode(Mode):
             perPassenger = self.passengerWaitInSecDedicated
         else:
             perPassenger = self.passengerWaitInSec
-        if network.car_speed > 0:
+        if (network.base_speed > 0) & (network.L > 0):
             numberOfStops = self.routeLength / self.stopSpacingInMeters
             meanTimePerStop = (self.minStopTimeInSec + self.headwayInSec * perPassenger * (
                     self.travelDemand.tripStartRatePerHour + self.travelDemand.tripEndRatePerHour) / (
                                        numberOfStops * 3600.0))
-            portionOfTimeStopped = min([meanTimePerStop * meanTimePerStop / self.headwayInSec, 1.0])
-            out = network.avgLinkLength * portionOfTimeStopped
+            timeToTraverseAtCarSpeed = network.L / network.base_speed
+            additionalTimeStopped = network.L / self.stopSpacingInMeters * meanTimePerStop
+            portionOfTimeStopped = min([additionalTimeStopped / (additionalTimeStopped + timeToTraverseAtCarSpeed), 1.0])
+            out = network.avgLinkLength * portionOfTimeStopped * self._N[network]
             portionOfRouteBlocked = out / self.routeLength
             # busSpeed = self.getSubNetworkSpeed(network.car_speed)
             # out = busSpeed / self.stop_spacing * self.N_tot * self.min_stop_time * network.l
+            if out > network.L:
+                print("BAD")
         else:
             out = 0
         return out
@@ -453,15 +506,21 @@ class BusMode(Mode):
         T_tot = sum([lengths[i] / speeds[i] for i in range(len(speeds))])
         for ind, n in enumerate(self._networks):
             if speeds[ind] > 0:
-                n_new = self._N_tot * lengths[ind] / speeds[ind] / T_tot
+                if isinf(speeds[ind]):
+                    n_new = 0.0
+                else:
+                    n_new = self._N_tot * times[ind] / T_tot
                 n.N_eq[self.name] = n_new * self.relativeLength
                 self._N[n] = n_new
+                if np.isnan(n_new):
+                    print('BAD BUS')
             else:
                 n_new = self._N_tot / lengths[ind]
                 n.N_eq[self.name] = n_new * self.relativeLength
                 self._N[n] = n_new
         self.routeAveragedSpeed = self.getSpeed()
         self.occupancy = self.getOccupancy()
+
         # if np.isnan(self.occupancy):
         #     print("AAAH")
 
@@ -485,27 +544,35 @@ class BusMode(Mode):
 
 
 class Network:
-    def __init__(self, data, idx, networkFlowParams: NetworkFlowParams):
-        self.networkFlowParams = networkFlowParams
+    def __init__(self, data, idx):
         self.data = data
         self.__idx = idx
-        # self.L = data.loc[idx, "Length"]
-        self.lam = networkFlowParams.lam
-        self.u_f = networkFlowParams.freeFlowSpeed
-        self.w = networkFlowParams.w
-        self.kappa = networkFlowParams.kappa
-        self.Q = networkFlowParams.Q
-        self.avgLinkLength = networkFlowParams.avgLinkLength
         self.N_eq = dict()
         self.L_blocked = dict()
         self._modes = dict()
-        self.car_speed = networkFlowParams.freeFlowSpeed
+        self.base_speed = self.freeFlowSpeed
         self.dedicated = data.loc[idx, "Dedicated"]
         self.isJammed = False
 
     @property
+    def type(self):
+        return self.data.at[self.__idx, "Type"]
+
+    @property
+    def avgLinkLength(self):
+        return self.data.at[self.__idx, "avgLinkLength"]
+
+    @property
+    def freeFlowSpeed(self):
+        return self.data.at[self.__idx, "vMax"]
+
+    @property
+    def jamDensity(self):
+        return self.data.at[self.__idx, "densityMax"]
+
+    @property
     def L(self):
-        return self.data.loc[self.__idx, "Length"]
+        return self.data.at[self.__idx, "Length"]
 
     @L.setter
     def L(self, L):
@@ -518,7 +585,7 @@ class Network:
         self.N_eq = dict()
         self.L_blocked = dict()
         self._modes = dict()
-        self.car_speed = self.networkFlowParams.freeFlowSpeed
+        self.base_speed = self.freeFlowSpeed
         self.isJammed = False
 
     def resetModes(self):
@@ -526,12 +593,12 @@ class Network:
             self.N_eq[mode.name] = mode.getN(self) * mode.params.relativeLength
             self.L_blocked[mode.name] = mode.getBlockedDistance(self)
         self.isJammed = False
-        self.car_speed = self.networkFlowParams.freeFlowSpeed
+        self.base_speed = self.freeFlowSpeed
         # mode.reset()
 
     def getBaseSpeed(self):
-        if self.car_speed > 0.01:
-            return self.car_speed
+        if self.base_speed > 0.01:
+            return self.base_speed
         else:
             return 0.01
 
@@ -540,29 +607,89 @@ class Network:
             # assert(isinstance(mode, Mode) | issubclass(mode, Mode))
             mode.updateModeBlockedDistance()
 
-    def MFD(self):
-        if self.L <= 0:
-            self.car_speed = 1.0
-            return
-        L_eq = self.L - self.getBlockedDistance()
-        N_eq = self.getN_eq()
-        maxDensity = 0.25
-        if (N_eq / L_eq < maxDensity) & (N_eq / L_eq >= 0.0):
-            noCongestionN = (self.kappa * L_eq * self.w - L_eq * self.Q) / (self.u_f + self.w)
-            if N_eq <= noCongestionN:
-                peakFlowSpeed = - L_eq * self.lam / noCongestionN * np.log(
-                    np.exp(- self.u_f * noCongestionN / (L_eq * self.lam)) +
-                    np.exp(- self.Q / self.lam) +
-                    np.exp(-(self.kappa - noCongestionN / L_eq) * self.w / self.lam))
-                v = self.u_f - N_eq / noCongestionN * (self.u_f - peakFlowSpeed)
+    def getMaxFlow(self) -> float:
+        if self.type == "Road":
+            if self.L > 0:
+                L_eq = self.L - self.getBlockedDistance()
+                if np.isnan(self.freeFlowSpeed * self.jamDensity / 2.0 * L_eq):
+                    print("OH no bad max flow")
+                return self.freeFlowSpeed * self.jamDensity / 2.0 * L_eq
             else:
-                v = - L_eq * self.lam / N_eq * np.log(
-                    np.exp(- self.u_f * N_eq / (L_eq * self.lam)) +
-                    np.exp(- self.Q / self.lam) +
-                    np.exp(-(self.kappa - N_eq / L_eq) * self.w / self.lam))
-            self.car_speed = np.maximum(v, 0.25)
+                return 0.0
         else:
-            self.car_speed = np.nan
+            return np.inf
+
+    def getMaxAccumulation(self):
+        if self.type == "Road":
+            if self.L > 0:
+                L_eq = self.L - self.getBlockedDistance()
+                return self.jamDensity * L_eq * 100000
+            else:
+                return 0.0
+        else:
+            return np.inf
+
+    def getMaxFlowForMode(self, mode: Mode) -> float:
+        totalMaxFlow = self.getMaxFlow()
+        otherModeFlows = 0.0
+        for otherModeName in self._modes.keys():
+            if otherModeName != mode.name:
+                otherModeFlows += self.N_eq[otherModeName] * self.base_speed
+        net = totalMaxFlow - otherModeFlows
+        if np.isnan(net):
+            print("WTF")
+        return net / mode.relativeLength /1609.34 * 3600.0 # convert from vehicle meters / sec to vehicle miles / hr
+
+    def getMaxAccumulationForMode(self, mode: Mode) -> float:
+        totalAccumulationFlow = self.getMaxFlow()
+        otherModeAccumulation = 0.0
+        for otherModeName in self._modes.keys():
+            if otherModeName != mode.name:
+                otherModeAccumulation += self.N_eq[otherModeName]
+        net = totalAccumulationFlow - otherModeAccumulation
+        if np.isnan(net):
+            print("WTF")
+        return net
+
+    def MFD(self):
+        if self.type == "Road":
+            if self.L > 0:
+                L_eq = self.L - self.getBlockedDistance()
+                N_eq = self.getN_eq()
+                k = N_eq / L_eq
+                if not (L_eq >= 0):
+                    print("OH NO, N LESS THAN 0")
+                v = self.freeFlowSpeed * (self.jamDensity - k) / self.jamDensity
+                v = max((v, 0.01))
+            else:
+                v = self.freeFlowSpeed
+        else:
+            v = self.freeFlowSpeed
+        self.base_speed = v
+
+    # def MFD(self):
+    #     if self.L <= 0:
+    #         self.car_speed = 1.0
+    #         return
+    #     L_eq = self.L - self.getBlockedDistance()
+    #     N_eq = self.getN_eq()
+    #     maxDensity = 0.25
+    #     if (N_eq / L_eq < maxDensity) & (N_eq / L_eq >= 0.0):
+    #         noCongestionN = (self.kappa * L_eq * self.w - L_eq * self.Q) / (self.u_f + self.w)
+    #         if N_eq <= noCongestionN:
+    #             peakFlowSpeed = - L_eq * self.lam / noCongestionN * np.log(
+    #                 np.exp(- self.u_f * noCongestionN / (L_eq * self.lam)) +
+    #                 np.exp(- self.Q / self.lam) +
+    #                 np.exp(-(self.kappa - noCongestionN / L_eq) * self.w / self.lam))
+    #             v = self.u_f - N_eq / noCongestionN * (self.u_f - peakFlowSpeed)
+    #         else:
+    #             v = - L_eq * self.lam / N_eq * np.log(
+    #                 np.exp(- self.u_f * N_eq / (L_eq * self.lam)) +
+    #                 np.exp(- self.Q / self.lam) +
+    #                 np.exp(-(self.kappa - N_eq / L_eq) * self.w / self.lam))
+    #         self.car_speed = np.maximum(v, 0.25)
+    #     else:
+    #         self.car_speed = np.nan
 
     def containsMode(self, mode: str) -> bool:
         return mode in self._modes.keys()
@@ -690,13 +817,13 @@ class NetworkCollection:
             for n in self._networks:
                 n.updateBlockedDistance()
                 n.MFD()
-                if np.isnan(n.car_speed):
+                if np.isnan(n.base_speed):
                     n.isJammed = True
             # for m in self.modes.values():
             #     m.updateN(self.demands[m.name])
 
     def __str__(self):
-        return str([n.car_speed for n in self._networks])
+        return str([n.base_speed for n in self._networks])
 
     # def addMode(self, networks: list, mode: Mode):
     #     for network in networks:
@@ -717,3 +844,6 @@ class NetworkCollection:
         for name, mode in self.modes.items():
             out[name] = (mode.getOperatorCosts(), mode.getOperatorRevenues())
         return out
+
+    # def getMaxFlowForMode(self, mode: str) -> float:
+    #     return sum([n.getMaxFlowForMode(mode) for n in self._networks])

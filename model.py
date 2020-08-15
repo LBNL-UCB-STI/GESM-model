@@ -6,6 +6,7 @@ from scipy.optimize import shgo
 from scipy.optimize import minimize, Bounds
 from skopt import gp_minimize
 from noisyopt import minimizeCompass
+import copy
 
 from utils.OD import TripCollection, OriginDestination, TripGeneration
 from utils.choiceCharacteristics import CollectedChoiceCharacteristics
@@ -59,7 +60,7 @@ class Optimizer:
             return 0.0
 
     def evaluate(self, reallocations: np.ndarray) -> float:
-        self.model.resetNetworks()
+        # self.model.resetNetworks()
         if self.__fromToSubNetworkIDs is not None:
             networkModification = NetworkModification(reallocations[:self.nSubNetworks()], self.__fromToSubNetworkIDs)
         else:
@@ -73,7 +74,7 @@ class Optimizer:
         userCosts, operatorCosts = self.model.collectAllCosts()
         dedicationCosts = self.getDedicationCost(reallocations)
         print(reallocations)
-        print(userCosts.total, operatorCosts.total, dedicationCosts)
+        print(userCosts.total + operatorCosts.total + dedicationCosts)
         return userCosts.total + operatorCosts.total + dedicationCosts
 
     def getBounds(self):
@@ -178,7 +179,7 @@ class ScenarioData:
         self["modeData"] = self.loadModeData()
 
     def copy(self):
-        return ScenarioData(self.__path, self.data.copy())
+        return ScenarioData(self.__path, copy.deepcopy(self.data))
 
     # def reallocate(self, fromSubNetwork, toSubNetwork, dist):
 
@@ -236,7 +237,7 @@ class Model:
         self.__originDestination.initializeTimePeriod(timePeriod)
         self.__tripGeneration.initializeTimePeriod(timePeriod)
         self.demand.initializeDemand(self.__population, self.__originDestination, self.__tripGeneration, self.__trips,
-                                     self.microtypes, self.__distanceBins, 0.7)
+                                     self.microtypes, self.__distanceBins, 5)
         self.choice.initializeChoiceCharacteristics(self.__trips, self.microtypes, self.__distanceBins)
 
     def findEquilibrium(self):
@@ -296,7 +297,7 @@ class Model:
             self.findEquilibrium()
             userCosts += self.getUserCosts() * durationInHours
             operatorCosts += self.getOperatorCosts() * durationInHours
-            print(self.getModeSplit())
+            # print(self.getModeSplit())
         return userCosts, operatorCosts
 
     def getModeSpeeds(self, timePeriod=None):
@@ -315,17 +316,17 @@ if __name__ == "__main__":
     a.findEquilibrium()
     ms = a.getModeSplit()
     print(a.getModeSpeeds())
-    # print(ms)
+    print(ms)
     # o = Optimizer("input-data", list(zip([2, 4, 6, 8], [13, 14, 15, 16])))
     # o = Optimizer("input-data", fromToSubNetworkIDs=list(zip([2, 8], [13, 16])),
     #               modesAndMicrotypes=list(zip(["A", "D", "A", "D"], ["bus", "bus", "rail", "rail"])),
     #               method="shgo")
     # o = Optimizer("input-data",
-    #               fromToSubNetworkIDs=list(zip([2, 8], [13, 16])),
+    #               fromToSubNetworkIDs=list(zip([2, 4, 6, 8], [13, 14, 15, 16])),
     #               method="noisy")
-    # # o.evaluate(np.array([0., 30., 200., 200., 300., 300.]))
-    # # o.evaluate(np.array([0., 30., 200., 200., 300., 300.]))
-    # # o.evaluate(np.array([300., 200., 200., 200.]))
+    # o.evaluate(np.array([0., 30., 200., 200.]))
+    # o.evaluate(np.array([100., 30., 200., 200.]))
+    # o.evaluate(np.array([100., 200., 200., 200.]))
     # output = o.minimize()
     print("DONE")
     # print(output.x)
