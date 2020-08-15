@@ -70,7 +70,7 @@ class Mode:
         self._N = dict()
         self._L_blocked = dict()
         self.N_queued = 0.0
-        self.queuing_speed = 0.1
+        self.queuing_speed = 0.01
         self.params = params
         self.__idx = idx # TODO: Replace with params.index.get_loc(idx) and use to_numpy() to access
         self._networks = networks
@@ -124,7 +124,7 @@ class Mode:
         if self.N_queued > 0:
             non_queued_speed = max(self._N, key=self._N.get).getBaseSpeed()
             queued_speed = self.queuing_speed
-            return ((self._N_tot - self.N_queued) * non_queued_speed + self.N_queued * queued_speed) / self._N_tot
+            return (self._N_tot * non_queued_speed + self.N_queued * queued_speed) / (self._N_tot + self.N_queued)
         else:
             return max(self._N, key=self._N.get).getBaseSpeed()
 
@@ -141,8 +141,9 @@ class Mode:
         return sum([n.getMaxFlow() for n in self._networks])
 
     def updateN(self, demand: TravelDemand):
+        n_old = self._N_tot
         n_new, n_queued = self.getLittlesLawN(demand.rateOfPmtPerHour, demand.averageDistanceInSystemInMiles)
-        self._N_tot = n_new
+        self._N_tot = (n_new + n_old) / 2.0
         self.N_queued = n_queued
         self.allocateVehicles()
 
@@ -160,11 +161,12 @@ class Mode:
         #     return rateOfPmtPerHour / speedInMilesPerHour
         ll_accumulation = rateOfPmtPerHour / speedInMilesPerHour
 
-        maxAccumulation = sum([n.getMaxAccumulationForMode(self) for n in self._networks])
+        maxAccumulation = sum([n.getMaxAccumulationForMode(self) for n in self._networks]) * 1.5
 
-        if ll_accumulation > maxAccumulation:
-            over = ll_accumulation - maxAccumulation
-            return maxAccumulation, over
+        if ll_accumulation > maxAccumulation * 0.5:
+            overPeak = ll_accumulation - maxAccumulation * 0.5
+            extra = maxAccumulation * 0.5 * (0.002*overPeak / (1+0.002*overPeak))
+            return maxAccumulation * 0.5 + extra, overPeak - extra
         else:
             return ll_accumulation, 0.0
 
@@ -623,7 +625,7 @@ class Network:
         if self.type == "Road":
             if self.L > 0:
                 L_eq = self.L - self.getBlockedDistance()
-                return self.jamDensity * L_eq * 0.5
+                return self.jamDensity * L_eq
             else:
                 return 0.0
         else:
@@ -721,6 +723,18 @@ class Network:
     def getModeValues(self) -> list:
         return list(self._modes.values())
 
+class VehicleMilesTraveledByNetwork:
+    def __init__(self, inputData=None):
+        if isinstance(inputData, dict):
+            self.__data = inputData
+        else:
+            self.__data = dict()
+
+    def __iadd__(self, other):
+        for key, value in other.items():
+            self.__data.setdefault(key, 0.0) += value
+        return self
+
 
 class NetworkCollection:
     def __init__(self, networksAndModes=None, modeToModeData=None, microtypeID=None, verbose=False):
@@ -767,25 +781,26 @@ class NetworkCollection:
         return np.any([n.isJammed for n in self._networks])
 
     def resetModes(self):
-        allModes = [n.getModeValues() for n in self._networks]
-        uniqueModes = set([item for sublist in allModes for item in sublist])
+        # allModes = [n.getModeValues() for n in self._networks]
+        # uniqueModes = set([item for sublist in allModes for item in sublist])
         for n in self._networks:
             n.isJammed = False
         self.modes = dict()
-        for m in uniqueModes:
+        for m in self.modes.values():
             m.updateN(TravelDemand())
             self.modes[m.name] = m
             self.demands[m.name] = m.travelDemand
         # self.updateNetworks()
 
     def updateModes(self, n: int = 50):
-        allModes = [n.getModeValues() for n in self._networks]
-        uniqueModes = set([item for sublist in allModes for item in sublist])
+        # allModes = [n.getModeValues() for n in self._networks]
+        # uniqueModes = set([item for sublist in allModes for item in sublist])
         oldSpeeds = self.getModeSpeeds()
         for it in range(n):
-            for m in uniqueModes:
+            for m in self.modes.values():
                 m.updateN(self.demands[m.name])
             # self.updateNetworks()
+            # vmtByNetwork =
             self.updateMFD()
             if self.verbose:
                 print(str(self))

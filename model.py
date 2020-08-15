@@ -237,7 +237,7 @@ class Model:
         self.__originDestination.initializeTimePeriod(timePeriod)
         self.__tripGeneration.initializeTimePeriod(timePeriod)
         self.demand.initializeDemand(self.__population, self.__originDestination, self.__tripGeneration, self.__trips,
-                                     self.microtypes, self.__distanceBins, 7.5)
+                                     self.microtypes, self.__distanceBins, 4)
         self.choice.initializeChoiceCharacteristics(self.__trips, self.microtypes, self.__distanceBins)
 
     def findEquilibrium(self):
@@ -245,7 +245,7 @@ class Model:
         i = 0
         while (diff > 0.00001) & (i < 20):
             ms = self.getModeSplit()
-            self.demand.updateMFD(self.microtypes, 5)
+            self.demand.updateMFD(self.microtypes, 50)
             self.choice.updateChoiceCharacteristics(self.microtypes, self.__trips)
             diff = self.demand.updateModeSplit(self.choice, self.__originDestination, ms)
             # c = self.getOperatorCosts().total
