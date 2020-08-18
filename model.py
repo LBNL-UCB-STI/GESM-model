@@ -236,7 +236,7 @@ class Model:
         self.__originDestination.initializeTimePeriod(timePeriod)
         self.__tripGeneration.initializeTimePeriod(timePeriod)
         self.demand.initializeDemand(self.__population, self.__originDestination, self.__tripGeneration, self.__trips,
-                                     self.microtypes, self.__distanceBins, 0.7)
+                                     self.microtypes, self.__distanceBins, 0.3)
         self.choice.initializeChoiceCharacteristics(self.__trips, self.microtypes, self.__distanceBins)
 
     def findEquilibrium(self):
@@ -255,7 +255,7 @@ class Model:
             # if np.isnan(c2):
             #     print("----")
             # i += 1
-            # print(ms)
+            print(ms)
             # print(self.getModeSpeeds().loc['auto', ['A_1', 'A_2', 'A_4', 'B_1', 'B_2', 'B_4']])
         ms = self.getModeSplit()
 
@@ -306,15 +306,15 @@ class Model:
 
 
 if __name__ == "__main__":
-    # a = Model("input-data-production")
-    # a.initializeTimePeriod("morning_rush")
-    # a.findEquilibrium()
-    # ms = a.getModeSplit()
-    a = Model("input-data")
-    a.initializeTimePeriod("AM-Peak")
+    a = Model("input-data-production")
+    a.initializeTimePeriod("morning_rush")
     a.findEquilibrium()
     ms = a.getModeSplit()
-    print(a.getModeSpeeds())
+    # a = Model("input-data")
+    # a.initializeTimePeriod("AM-Peak")
+    # a.findEquilibrium()
+    # ms = a.getModeSplit()
+    # print(a.getModeSpeeds())
     # print(ms)
     # o = Optimizer("input-data", list(zip([2, 4, 6, 8], [13, 14, 15, 16])))
     # o = Optimizer("input-data", fromToSubNetworkIDs=list(zip([2, 8], [13, 16])),

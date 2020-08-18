@@ -128,7 +128,8 @@ class Mode:
     def getBlockedDistance(self, network):
         return self._L_blocked[network]
 
-    def updateN(self, demand: TravelDemand):
+    def updateN(self):
+        demand = self.travelDemand
         n_new = self.getLittlesLawN(demand.rateOfPmtPerHour, demand.averageDistanceInSystemInMiles)
         self._N_tot = n_new
         self.allocateVehicles()
@@ -251,7 +252,7 @@ class RailMode(Mode):
     def getOperatorRevenues(self) -> float:
         return self.travelDemand.tripStartRatePerHour * self.fare
 
-    def updateN(self, demand: TravelDemand):
+    def updateN(self):
         n_new = self.getRouteLength() / self.routeAveragedSpeed / self.headwayInSec
         self._N_tot = n_new
         self.allocateVehicles()
@@ -350,7 +351,7 @@ class BusMode(Mode):
     def getAccessDistance(self) -> float:
         return self.stopSpacingInMeters / 4.0 / self.portionAreaCovered ** 2.0
 
-    def updateN(self, demand: TravelDemand):
+    def updateN(self):
         n_new = self.routeLength / self.routeAveragedSpeed / self.headwayInSec
         self._N_tot = n_new
         self.allocateVehicles()
@@ -646,18 +647,18 @@ class NetworkCollection:
             n.isJammed = False
         self.modes = dict()
         for m in uniqueModes:
-            m.updateN(TravelDemand())
             self.modes[m.name] = m
-            self.demands[m.name] = m.travelDemand
+            self.demands[m.name] = TravelDemand()
+            m.updateN()
         # self.updateNetworks()
 
-    def updateModes(self, n: int = 50):
-        allModes = [n.getModeValues() for n in self._networks]
-        uniqueModes = set([item for sublist in allModes for item in sublist])
+    def updateModes(self, n: int = 5):
+        # allModes = [n.getModeValues() for n in self._networks]
+        # uniqueModes = set([item for sublist in allModes for item in sublist])
         oldSpeeds = self.getModeSpeeds()
         for it in range(n):
-            for m in uniqueModes:
-                m.updateN(self.demands[m.name])
+            for m in self.modes.values():  # uniqueModes:
+                m.updateN()
             # self.updateNetworks()
             self.updateMFD()
             if self.verbose:
