@@ -140,6 +140,9 @@ class Mode:
     def getMaxFlow(self):
         return sum([n.getMaxFlow() for n in self._networks])
 
+    def getRateOfVmtPerHour(self):
+        return 0.0
+
     def updateN(self, demand: TravelDemand):
         n_old = self._N_tot
         n_new, n_queued = self.getLittlesLawN(demand.rateOfPmtPerHour, demand.averageDistanceInSystemInMiles)
@@ -723,6 +726,7 @@ class Network:
     def getModeValues(self) -> list:
         return list(self._modes.values())
 
+
 class VehicleMilesTraveledByNetwork:
     def __init__(self, inputData=None):
         if isinstance(inputData, dict):
@@ -732,16 +736,19 @@ class VehicleMilesTraveledByNetwork:
 
     def __iadd__(self, other):
         for key, value in other.items():
-            self.__data.setdefault(key, 0.0) += value
+            if key in self.__data:
+                self.__data[key] += value
+            else:
+                self.__data[key] = value
         return self
 
 
 class NetworkCollection:
     def __init__(self, networksAndModes=None, modeToModeData=None, microtypeID=None, verbose=False):
         self._networks = list()
+        self.modes = dict()
         if isinstance(networksAndModes, Dict) and isinstance(modeToModeData, Dict):
             self.populateNetworksAndModes(networksAndModes, modeToModeData, microtypeID)
-        self.modes = dict()
         self.demands = TravelDemands([])
         self.verbose = verbose
         self.resetModes()
@@ -764,15 +771,15 @@ class NetworkCollection:
             assert (isinstance(networks, List))
             params = modeToModeData[modeName]
             if modeName == "bus":
-                BusMode(networks, params, microtypeID)
+                self.modes["bus"] = BusMode(networks, params, microtypeID)
             elif modeName == "auto":
-                AutoMode(networks, params, microtypeID)
+                self.modes["auto"] = AutoMode(networks, params, microtypeID)
             elif modeName == "walk":
-                WalkMode(networks, params, microtypeID)
+                self.modes["walk"] = WalkMode(networks, params, microtypeID)
             elif modeName == "bike":
-                BikeMode(networks, params, microtypeID)
+                self.modes["bike"] = BikeMode(networks, params, microtypeID)
             elif modeName == "rail":
-                RailMode(networks, params, microtypeID)
+                self.modes["rail"] = RailMode(networks, params, microtypeID)
             else:
                 print("BAD!")
                 Mode(networks, params, microtypeID, "bad")
@@ -793,11 +800,11 @@ class NetworkCollection:
         # self.updateNetworks()
 
     def updateModes(self, n: int = 50):
-        # allModes = [n.getModeValues() for n in self._networks]
-        # uniqueModes = set([item for sublist in allModes for item in sublist])
+        allModes = [n.getModeValues() for n in self._networks]
+        uniqueModes = set([item for sublist in allModes for item in sublist])
         oldSpeeds = self.getModeSpeeds()
         for it in range(n):
-            for m in self.modes.values():
+            for m in uniqueModes:#self.modes.values():
                 m.updateN(self.demands[m.name])
             # self.updateNetworks()
             # vmtByNetwork =

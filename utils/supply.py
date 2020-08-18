@@ -28,7 +28,11 @@ class TravelDemands:
             self._modes.append(key)
 
     def __getitem__(self, item: str) -> TravelDemand:
-        return self._demands[item]
+        if item in self._demands:
+            return self._demands[item]
+        else:
+            print("Is this supposed to happen")
+            return TravelDemand()
 
     def setEndRate(self, mode: str, rate: float):
         self._demands[mode].tripEndRatePerHour = rate
