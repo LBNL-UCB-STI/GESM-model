@@ -49,6 +49,27 @@ class DemandClass:
             mode_split[modes[ind]] = probabilities[ind]
         return mode_split
 
+    def numpyModeSplit(self, mcc: ModalChoiceCharacteristics) -> np.ndarray:
+        k = 1.0
+        modes = mcc.modes()
+        utils = np.zeros(len(modes), dtype=float)
+        for idx, mode in enumerate(modes):
+            util = 0.
+            util += self[mode, "Intercept"]
+            util += (mcc[mode].travel_time * 60.0) * self[mode, "BetaTravelTime"]
+            util += (mcc[mode].wait_time * 60.0) * self[mode, "BetaWaitTime"]
+            util += (mcc[mode].wait_time * 60.0) ** 2.0 * self[mode, "BetaWaitTimeSquared"]
+            util += (mcc[mode].access_time * 60.0) * self[mode, "BetaAccessTime"]
+            util += mcc[mode].cost * self[mode, "VOM"]
+            if mode == "bike":
+                util -= (mcc[mode].travel_time * 60.0) * self[mode, "BetaTravelTime"] * self[
+                    mode, "ProtectedPreference"] * (mcc[mode].protected_distance / mcc.distanceInMiles)
+            utils[idx] = util
+            # utils = np.append(utils, util)
+        exp_utils = np.exp(utils * k)
+        probabilities = exp_utils / np.sum(exp_utils)
+        return probabilities
+
     def getModeCostPerTrip(self, mcc: ModalChoiceCharacteristics, mode, params=None):
         if mode not in mcc:
             return np.nan, np.nan, np.nan, np.nan
@@ -95,17 +116,46 @@ class Population:
     Class for storing and representing population of microtypes.
     """
 
-    def __init__(self):
+    def __init__(self, scenarioData):
+        self.__scenarioData = scenarioData
         self.__populationGroups = dict()
         self.__demandClasses = dict()
         self.__totalCosts = dict()
         self.totalPopulation = 0
+        self.__numpy = np.zeros((len(scenarioData.diToIdx), len(scenarioData.modeToIdx), len(scenarioData.paramToIdx)))
+        self.__numpyCost = np.zeros(
+            (len(scenarioData.diToIdx), len(scenarioData.modeToIdx), len(scenarioData.paramToIdx)))
+        self.__modes = scenarioData.getModes()
+        self.utilsToDollars = 200
+
+    @property
+    def diToIdx(self):
+        return self.__scenarioData.diToIdx
+
+    @property
+    def modeToIdx(self):
+        return self.__scenarioData.modeToIdx
+
+    @property
+    def paramToIdx(self):
+        return self.__scenarioData.paramToIdx
+
+    @property
+    def numpy(self) -> np.ndarray:
+        return self.__numpy
+
+    @property
+    def numpyCost(self) -> np.ndarray:
+        return self.__numpyCost
 
     def __setitem__(self, key: DemandIndex, value: DemandClass):
         self.__demandClasses[key] = value
 
     def __getitem__(self, item: DemandIndex) -> DemandClass:
         return self.__demandClasses[item]
+
+    def __len__(self):
+        return len(self.__demandClasses)
 
     def getPopulation(self, homeMicrotypeID: str, populationGroupType: str):
         if (homeMicrotypeID, populationGroupType) in self.__populationGroups:
@@ -122,11 +172,31 @@ class Population:
                                                                                             populationGroupType,
                                                                                             row.Population)
             self.totalPopulation += row.Population
+
+        data = populationGroups.set_index(['TripPurposeID', 'PopulationGroupTypeID', 'Mode']).unstack(-1)
+
         for homeMicrotypeID in populations["MicrotypeID"].unique():
+            for (tripPurpose, groupId), row in data.iterrows():
+                df = row.unstack().loc[['Intercept', 'BetaTravelTime', 'BetaWaitTime', 'BetaAccessTime'], self.__modes]
+                # Convert everything to units of hours
+                df.loc['BetaTravelTime', :] *= 60.0
+                df.loc['BetaWaitTime', :] *= 60.0
+                # df.BetaWaitTimeSquared *= 3600.0
+                df.loc['BetaAccessTime', :] *= 60.0
+                for mode, values in df.transpose().iterrows():
+                    self.__numpy[
+                        self.diToIdx[DemandIndex(homeMicrotypeID, groupId, tripPurpose
+                                                 )], self.modeToIdx[mode], [0,1,3,4]] = values.to_numpy()
+                # self.diToIdx[DemandIndex(homeMicrotypeID, groupId, tripPurpose)] = counter
+                # counter += 1
+                # {'intercept': 0, 'travel_time': 1, 'cost': 2, 'wait_time': 3, 'access_time': 4,
+                # 'protected_distance': 5, 'distance': 6}
             for (groupId, tripPurpose), group in populationGroups.groupby(['PopulationGroupTypeID', 'TripPurposeID']):
                 demandIndex = DemandIndex(homeMicrotypeID, groupId, tripPurpose)
                 out = DemandClass(group.set_index("Mode").drop(columns=['PopulationGroupTypeID', 'TripPurposeID']))
                 self[demandIndex] = out
+        self.__numpyCost = self.__numpy.copy() * self.utilsToDollars
+        self.__numpyCost[:, :, 0] = 0.0
         print("|  Loaded ", len(populations), " population groups")
 
     def __iter__(self):

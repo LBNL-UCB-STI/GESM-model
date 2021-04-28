@@ -1,3 +1,3 @@
-﻿SubnetworkID,MicrotypeID,ModesAllowed,Length,vMax
-1,A,Auto,10000,16
-2,A,Auto-Bus,5000,16
+﻿SubnetworkID,MicrotypeID,ModesAllowed,Length,vMax,densityMax,Type,Dedicated,avgLinkLength
+1,A,Auto-Bus-Walk,2000,16,0.145,Road,False,50
+2,A,Bus,500,16,0.145,Road,True,50

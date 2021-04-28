@@ -1,18 +1,58 @@
 # -*- coding: utf-8 -*-
+import numpy as np
 
 
 class TravelDemand:
-    def __init__(self):
-        self.tripStartRatePerHour = 0.0
-        self.tripEndRatePerHour = 0.0
-        self.rateOfPmtPerHour = 0.0
-        self.averageDistanceInSystemInMiles = 2.0
+    def __init__(self, data=None, dataToIdx=None):
+        if data is None:
+            self.__data = np.zeros(4)
+        else:
+            self.__data = data
+        if dataToIdx is None:
+            self.__dataToIdx = {'tripStarts': 0, 'tripEnds': 1, 'throughTrips': 2, 'throughDistance': 3}
+        else:
+            self.__dataToIdx = dataToIdx
+
+    @property
+    def tripStartRatePerHour(self):
+        return self.__data[self.__dataToIdx['tripStarts']]
+
+    @tripStartRatePerHour.setter
+    def tripStartRatePerHour(self, value):
+        self.__data[self.__dataToIdx['tripStarts']] = value
+
+    @property
+    def tripEndRatePerHour(self):
+        return self.__data[self.__dataToIdx['tripEnds']]
+
+    @tripEndRatePerHour.setter
+    def tripEndRatePerHour(self, value):
+        self.__data[self.__dataToIdx['tripEnds']] = value
+
+    @property
+    def rateOfPmtPerHour(self):
+        return self.__data[self.__dataToIdx['throughDistance']]
+
+    @rateOfPmtPerHour.setter
+    def rateOfPmtPerHour(self, value):
+        self.__data[self.__dataToIdx['throughDistance']] = value
+
+    @property
+    def throughTrips(self):
+        return self.__data[self.__dataToIdx['throughTrips']]
+
+    @throughTrips.setter
+    def throughTrips(self, value):
+        self.__data[self.__dataToIdx['throughTrips']] = value
+
+    @property
+    def averageDistanceInSystemInMiles(self):
+        return self.rateOfPmtPerHour / self.throughTrips
 
     def reset(self):
         self.tripStartRatePerHour = 0.0
         self.tripEndRatePerHour = 0.0
         self.rateOfPmtPerHour = 0.0
-        self.averageDistanceInSystemInMiles = 2.0
 
 
 class TravelDemands:
@@ -68,11 +108,11 @@ class TravelDemands:
         for mode in self._modes:
             self._demands[mode].reset()
 
-    def setSingleDemand(self, mode, demand: float, trip_distance_in_miles: float):
-        self._demands[mode].tripStartRatePerHour = demand
-        self._demands[mode].tripEndRatePerHour = demand
-        self._demands[mode].rateOfPmtPerHour = demand * trip_distance_in_miles
-        self._demands[mode].averageDistanceInSystemInMiles = trip_distance_in_miles
+    # def setSingleDemand(self, mode, demand: float, trip_distance_in_miles: float):
+    #     self._demands[mode].tripStartRatePerHour = demand
+    #     self._demands[mode].tripEndRatePerHour = demand
+    #     self._demands[mode].rateOfPmtPerHour = demand * trip_distance_in_miles
+    #     self._demands[mode].averageDistanceInSystemInMiles = trip_distance_in_miles
 
     # def addSingleDemand(self, mode, demand: float, trip_distance_in_meters: float):
     #     self._demands[mode].tripStartRatePerHour += demand
@@ -81,10 +121,14 @@ class TravelDemands:
     #     self._demands[mode].averageDistanceInSystemInMiles += trip_distance_in_meters / 1609.34
 
     def addModeStarts(self, mode: str, demand: float):
-        self._demands[mode].tripStartRatePerHour += demand
+        if demand > 0:
+            if mode not in self._demands:
+                print("AAAAAAH")
+            self._demands[mode].tripStartRatePerHour += demand
 
     def addModeEnds(self, mode: str, demand: float):
-        self._demands[mode].tripEndRatePerHour += demand
+        if demand > 0:
+            self._demands[mode].tripEndRatePerHour += demand
 
     def addModeThroughTrips(self, mode: str, demand: float, trip_distance_in_miles: float):
         if demand > 0:

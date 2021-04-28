@@ -16,15 +16,15 @@ distanceBins = pd.read_csv(path)
 
 binWeights = {"short": 0.5, "medium": 0.75, "long": 0.9}
 collected = dict()
-
-for destinationMicrotype in microtypes.MicrotypeID:
-    for distBin in distanceBins.DistanceBinID:
-        for currentMicrotype in microtypes.MicrotypeID:
-            out = {mID: binWeights[distBin]/len(distanceBins.DistanceBinID) for mID in microtypes.MicrotypeID}
-            collected[(destinationMicrotype, distBin, currentMicrotype)] = out
+for originMicrotype in microtypes.MicrotypeID:
+    for destinationMicrotype in microtypes.MicrotypeID:
+        for distBin in distanceBins.DistanceBinID:
+            for currentMicrotype in microtypes.MicrotypeID:
+                out = {mID: binWeights[distBin]/len(microtypes.MicrotypeID) for mID in microtypes.MicrotypeID}
+                collected[(originMicrotype, destinationMicrotype, distBin, currentMicrotype)] = out
 collected = pd.DataFrame(collected)
 collected.index.set_names(['To'], inplace=True)
-collected.columns.set_names(['Destination', 'Distance', 'From'], inplace=True)
+collected.columns.set_names(['OriginMicrotypeID','DestinationMicrotypeID','DistanceBinID','From'], inplace=True)
 collected = collected.transpose()
 
 

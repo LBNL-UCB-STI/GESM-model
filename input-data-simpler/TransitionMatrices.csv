@@ -1,0 +1,4 @@
+OriginMicrotypeID,DestinationMicrotypeID,DistanceBinID,From,A
+A,A,short,A,0.5
+A,A,medium,A,0.75
+A,A,long,A,0.9
